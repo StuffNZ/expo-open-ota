@@ -53,7 +53,18 @@ func (h *RollbackHandler) HandleRollback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	commitHash := r.URL.Query().Get("commitHash")
-	rollback, err := h.deploymentService.CreateRollback(r.Context(), appId, platform, commitHash, runtimeVersion, branchName)
+	// Route through RollbackRelease (not CreateRollback directly): it owns
+	// the branch/runtime-version upsert, so rollbacks behave consistently in
+	// both stateless and DB mode. Fixing the call also un-deadens the
+	// orchestrating path, which previously had no callers.
+	rollback, err := h.deploymentService.RollbackRelease(r.Context(), services.RollbackParams{
+		AppID:          appId,
+		BranchName:     branchName,
+		Platform:       platform,
+		RuntimeVersion: runtimeVersion,
+		CommitHash:     commitHash,
+		RequestID:      requestID,
+	})
 	if err != nil {
 		log.Printf("[RequestID: %s] Error creating rollback: %v", requestID, err)
 		http.Error(w, "Error creating rollback", http.StatusInternalServerError)

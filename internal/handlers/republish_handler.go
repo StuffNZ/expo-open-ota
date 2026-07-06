@@ -75,11 +75,18 @@ func (h *RepublishHandler) HandleRepublish(w http.ResponseWriter, r *http.Reques
 	})
 	if err != nil {
 		log.Printf("[RequestID: %s] Error republishing update: %v", requestID, err)
-		status := http.StatusBadRequest
-		if strings.Contains(err.Error(), "not found") {
-			status = http.StatusNotFound
+		// Validation failures surface their message; anything else (storage,
+		// database) is an internal error whose details must not reach the
+		// client.
+		msg := err.Error()
+		switch {
+		case strings.Contains(msg, "not found"):
+			http.Error(w, msg, http.StatusNotFound)
+		case strings.HasPrefix(msg, "republish aborted") || strings.HasPrefix(msg, "platform identifier mismatch"):
+			http.Error(w, msg, http.StatusBadRequest)
+		default:
+			http.Error(w, "Error republishing update", http.StatusInternalServerError)
 		}
-		http.Error(w, err.Error(), status)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

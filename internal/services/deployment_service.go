@@ -298,7 +298,7 @@ func (s *DeploymentService) RollbackRelease(ctx context.Context, params Rollback
 		log.Printf("[RequestID: %s] Error upserting branch and runtime version: %v", params.RequestID, err)
 		return nil, err
 	}
-	rollback, err := s.CreateRollback(ctx, params.AppID, params.BranchName, params.RuntimeVersion, params.Platform, params.CommitHash)
+	rollback, err := s.CreateRollback(ctx, params.AppID, params.Platform, params.CommitHash, params.RuntimeVersion, params.BranchName)
 	if err != nil {
 		log.Printf("[RequestID: %s] Error creating rollback: %v", params.RequestID, err)
 		return nil, err
