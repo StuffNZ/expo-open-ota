@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -625,4 +626,16 @@ func TestResetAppsForTest_ClearsRegistry(t *testing.T) {
 	assert.Empty(t, ListAppIds())
 	_, err := GetAppConfig("x")
 	assert.Error(t, err)
+}
+
+func TestReadAppsReturnsSentinelWhenNoConfig(t *testing.T) {
+	// A fresh control-plane install has no legacy env apps. Callers (the
+	// infra→DB migration) rely on this sentinel to treat absence as
+	// "nothing to migrate" rather than a boot failure.
+	t.Setenv("EXPO_APPS_JSON", "")
+	t.Setenv("EXPO_APP_ID", "")
+	_, _, err := ReadApps()
+	if !errors.Is(err, ErrNoAppsConfig) {
+		t.Fatalf("expected ErrNoAppsConfig, got: %v", err)
+	}
 }

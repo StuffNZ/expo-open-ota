@@ -104,6 +104,12 @@ func (s *PostgresChannelStore) GetChannelBranchMapping(ctx context.Context, appI
 		AppID: pgAppID,
 		Name:  channelName,
 	})
+	if database.IsNoRows(err) {
+		// Same contract as the stateless store: nil means "no mapping for
+		// this channel", which the manifest/assets handlers answer with 404
+		// — not a server error.
+		return nil, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve channel mapping from database: %w", err)
 	}

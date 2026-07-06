@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -138,6 +139,12 @@ func LoadApps() error {
 // human-readable source tag used for error messages. EXPO_APPS_JSON wins when
 // set. The flat-env fallback reads legacy v1 variable names verbatim to
 // preserve upgrade-in-place.
+// ErrNoAppsConfig means no legacy/env app configuration is present. Callers
+// that import legacy infrastructure (e.g. the infra→DB migration) treat this
+// as "nothing to migrate", NOT as a failure — a fresh control-plane install
+// legitimately has no env apps.
+var ErrNoAppsConfig = errors.New("no apps config found: set EXPO_APPS_JSON for multi-app, or EXPO_APP_ID + EXPO_ACCESS_TOKEN + key vars for the single-app case")
+
 func ReadApps() ([]AppConfig, string, error) {
 	if inline := strings.TrimSpace(os.Getenv("EXPO_APPS_JSON")); inline != "" {
 		var apps []AppConfig
@@ -149,7 +156,7 @@ func ReadApps() ([]AppConfig, string, error) {
 	if appId := strings.TrimSpace(os.Getenv("EXPO_APP_ID")); appId != "" {
 		return []AppConfig{loadFromFlatEnv(appId)}, "flat env (EXPO_APP_ID)", nil
 	}
-	return nil, "", fmt.Errorf("no apps config found: set EXPO_APPS_JSON for multi-app, or EXPO_APP_ID + EXPO_ACCESS_TOKEN + key vars for the single-app case")
+	return nil, "", ErrNoAppsConfig
 }
 
 // loadFromFlatEnv reads the v1 single-app env vars and returns an AppConfig.

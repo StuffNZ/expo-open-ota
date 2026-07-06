@@ -2,6 +2,7 @@ package migrations
 
 import (
 	"context"
+	"errors"
 	"database/sql"
 	"expo-open-ota/config"
 	"expo-open-ota/internal/bucket"
@@ -54,6 +55,13 @@ func UpMigrateEnvJSON(ctx context.Context, tx *sql.Tx) error {
 	log.Println("🚀 [DATABASE] Starting migration of infrastructure from env/bucket to the database...")
 	config.LoadApps()
 	apps, source, err := config.ReadApps()
+	if errors.Is(err, config.ErrNoAppsConfig) {
+		// Fresh control-plane install: no legacy env/bucket infrastructure
+		// exists, so there is nothing to import. Apps are created via the
+		// dashboard instead.
+		log.Println("[DATABASE] No legacy apps config found; nothing to migrate")
+		return nil
+	}
 	if err != nil {
 		log.Printf("Error reading apps from config: %v", err)
 		return err
