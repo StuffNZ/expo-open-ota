@@ -36,6 +36,13 @@ func resetKeyStoreEnv(t *testing.T) {
 	})
 }
 
+func mustAppConfig(t *testing.T, appId string) config.AppConfig {
+	t.Helper()
+	appConfig, err := config.GetAppConfig(appId)
+	require.NoError(t, err)
+	return *appConfig
+}
+
 func TestGetPrivateExpoKey_IsolatedPerApp(t *testing.T) {
 	// Multi-app correctness property — two apps served by the same
 	// instance must NOT be able to sign with the same private key. A
@@ -48,8 +55,8 @@ func TestGetPrivateExpoKey_IsolatedPerApp(t *testing.T) {
     ]`)
 	require.NoError(t, config.LoadApps())
 
-	priv1 := GetPrivateExpoKey("app-1")
-	priv2 := GetPrivateExpoKey("app-2")
+	priv1 := GetPrivateExpoKey(mustAppConfig(t, "app-1"))
+	priv2 := GetPrivateExpoKey(mustAppConfig(t, "app-2"))
 
 	assert.Equal(t, app1PEM, priv1)
 	assert.Equal(t, app2PEM, priv2)
@@ -64,8 +71,8 @@ func TestGetPublicExpoKey_IsolatedPerApp(t *testing.T) {
     ]`)
 	require.NoError(t, config.LoadApps())
 
-	assert.Equal(t, app1PEM, GetPublicExpoKey("app-1"))
-	assert.Equal(t, app2PEM, GetPublicExpoKey("app-2"))
+	assert.Equal(t, app1PEM, GetPublicExpoKey(mustAppConfig(t, "app-1")))
+	assert.Equal(t, app2PEM, GetPublicExpoKey(mustAppConfig(t, "app-2")))
 }
 
 func TestGetPrivateExpoKey_UnknownAppReturnsEmpty(t *testing.T) {
@@ -78,6 +85,8 @@ func TestGetPrivateExpoKey_UnknownAppReturnsEmpty(t *testing.T) {
     ]`)
 	require.NoError(t, config.LoadApps())
 
-	assert.Empty(t, GetPrivateExpoKey("does-not-exist"))
-	assert.Empty(t, GetPublicExpoKey("does-not-exist"))
+	// App lookup now happens in the config layer: an unknown id fails there,
+	// before the key store is ever consulted.
+	_, err := config.GetAppConfig("does-not-exist")
+	assert.Error(t, err)
 }

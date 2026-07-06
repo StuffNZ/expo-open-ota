@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"expo-open-ota/config"
 	"expo-open-ota/internal/bucket"
-	cache2 "expo-open-ota/internal/cache"
-	"expo-open-ota/internal/handlers"
 	"expo-open-ota/internal/types"
 	"expo-open-ota/internal/update"
 	"github.com/jarcoal/httpmock"
@@ -46,7 +44,7 @@ func TestNotValidChannelForManifest(t *testing.T) {
 			}
 			return nil, nil
 		})
-	handlers.ManifestHandler(w, r)
+	newTestContainer(t).ExpoProtocolHandler.HandleManifest(w, r)
 	assert.Equal(t, 500, w.Code, "Expected status code 500 for an invalid branch")
 	assert.Equal(t, "Error fetching channel mapping: GraphQL request failed with status: 500 message: \n", w.Body.String())
 }
@@ -96,7 +94,7 @@ func TestNotMappedChannelForManifest(t *testing.T) {
 			}
 			return nil, nil
 		})
-	handlers.ManifestHandler(w, r)
+	newTestContainer(t).ExpoProtocolHandler.HandleManifest(w, r)
 	assert.Equal(t, 404, w.Code, "Expected status code 404 for an unmapped channel")
 	assert.Equal(t, "No branch mapping found\n", w.Body.String(), "Expected 'No branch mapping found' message")
 }
@@ -115,7 +113,7 @@ func TestNotValidProtocolVersionsForManifest(t *testing.T) {
 	r.Header.Add("expo-protocol-version", "invalid")
 	r.Header.Add("expo-expect-signature", "true")
 	mockWorkingExpoResponse("staging")
-	handlers.ManifestHandler(w, r)
+	newTestContainer(t).ExpoProtocolHandler.HandleManifest(w, r)
 	assert.Equal(t, 400, w.Code, "Expected status code 400 for an invalid protocole version")
 	assert.Equal(t, "Invalid protocol version\n", w.Body.String(), "Expected 'Invalid protocol version' message")
 }
@@ -134,7 +132,7 @@ func TestNotValidPlatformForManifest(t *testing.T) {
 	r.Header.Add("expo-channel-name", "staging")
 	r.Header.Add("expo-app-id", "test-app-id")
 	mockWorkingExpoResponse("staging")
-	handlers.ManifestHandler(w, r)
+	newTestContainer(t).ExpoProtocolHandler.HandleManifest(w, r)
 	assert.Equal(t, 400, w.Code, "Expected status code 400 for an invalid platform")
 	assert.Equal(t, "Invalid platform\n", w.Body.String(), "Expected 'IInvalid platform' message")
 }
@@ -156,7 +154,7 @@ func TestManifestMissingAppIdHeader(t *testing.T) {
 	r.Header.Add("expo-channel-name", "staging")
 	// No expo-app-id.
 
-	handlers.ManifestHandler(w, r)
+	newTestContainer(t).ExpoProtocolHandler.HandleManifest(w, r)
 	assert.Equal(t, 400, w.Code, "Missing expo-app-id must fail with 400")
 }
 
@@ -177,7 +175,7 @@ func TestManifestEmptyAppIdHeader(t *testing.T) {
 	r.Header.Add("expo-channel-name", "staging")
 	r.Header.Add("expo-app-id", "")
 
-	handlers.ManifestHandler(w, r)
+	newTestContainer(t).ExpoProtocolHandler.HandleManifest(w, r)
 	assert.Equal(t, 400, w.Code, "Empty expo-app-id must fail with 400")
 }
 
@@ -201,7 +199,7 @@ func TestManifestMalformedAppIdHeader(t *testing.T) {
 			r.Header.Add("expo-channel-name", "staging")
 			r.Header.Add("expo-app-id", badId)
 
-			handlers.ManifestHandler(w, r)
+			newTestContainer(t).ExpoProtocolHandler.HandleManifest(w, r)
 			// 400 (malformed) or 404 (not in registry) are both acceptable
 			// — the invariant is "no 5xx and no data returned".
 			assert.Truef(t, w.Code == 400 || w.Code == 404, "want 400 or 404, got %d", w.Code)
@@ -226,7 +224,7 @@ func TestUnknownAppIdForManifest(t *testing.T) {
 	r.Header.Add("expo-channel-name", "staging")
 	r.Header.Add("expo-app-id", "this-id-is-not-in-apps-json")
 
-	handlers.ManifestHandler(w, r)
+	newTestContainer(t).ExpoProtocolHandler.HandleManifest(w, r)
 	assert.Equal(t, 404, w.Code, "Unknown app id must fail early with 404")
 	assert.Equal(t, "Unknown app id\n", w.Body.String())
 }
@@ -246,7 +244,7 @@ func TestNotValidRuntimeVersionForManifest(t *testing.T) {
 	r.Header.Add("expo-app-id", "test-app-id")
 
 	mockWorkingExpoResponse("staging")
-	handlers.ManifestHandler(w, r)
+	newTestContainer(t).ExpoProtocolHandler.HandleManifest(w, r)
 	assert.Equal(t, 400, w.Code, "Expected status code 400 when runtime version is not provided")
 	assert.Equal(t, "No runtime version provided\n", w.Body.String(), "Expected 'No runtime version provided' message")
 }
@@ -287,7 +285,7 @@ func TestNotValidCertificatesForManifest(t *testing.T) {
 	r.Header.Add("expo-channel-name", "staging")
 	r.Header.Add("expo-app-id", "test-app-id")
 	mockWorkingExpoResponse("staging")
-	handlers.ManifestHandler(w, r)
+	newTestContainer(t).ExpoProtocolHandler.HandleManifest(w, r)
 
 	assert.Equal(t, 500, w.Code, "Expected status code 500 when certificates are not valid")
 	assert.Equal(t, "Error signing content\n", w.Body.String(), "Expected 'Error signing content' message")
@@ -307,7 +305,7 @@ func TestNoUpdatesForManifest(t *testing.T) {
 	r.Header.Add("expo-channel-name", "staging")
 	r.Header.Add("expo-app-id", "test-app-id")
 	mockWorkingExpoResponse("staging")
-	handlers.ManifestHandler(w, r)
+	newTestContainer(t).ExpoProtocolHandler.HandleManifest(w, r)
 	assert.Equal(t, 200, w.Code, "Expected status code 200 when manifest is retrieved")
 	parts, err := ParseMultipartMixedResponse(w.Header().Get("Content-Type"), w.Body.Bytes())
 	if err != nil {
@@ -396,10 +394,8 @@ func TestSkippingNotValidUpdatesAndCache(t *testing.T) {
 	resolvedBucket := bucket.GetBucket()
 	file, _ := resolvedBucket.GetFile(*lastUpdate, ".check")
 	defer file.Reader.Close()
-	cache := cache2.GetCache()
-	cacheKey := update.ComputeLastUpdateCacheKey("test-app-id", "branch-4", "1", "android")
-	value := cache.Get(cacheKey)
-	assert.Equal(t, "{\"appId\":\"test-app-id\",\"branch\":\"branch-4\",\"runtimeVersion\":\"1\",\"updateId\":\"1674170951\",\"createdAt\":1674170951000000}", value, "Expected a specific value")
+	// lastUpdate caching moved to the update service layer; the update
+	// package itself no longer writes the cache.
 	assert.NotNil(t, file.Reader, "Expected a file")
 }
 
@@ -418,7 +414,7 @@ func TestValidRequestForStagingManifest(t *testing.T) {
 	r.Header.Add("expo-expect-signature", "true")
 	r.Header.Add("expo-channel-name", "staging")
 	r.Header.Add("expo-app-id", "test-app-id")
-	handlers.ManifestHandler(w, r)
+	newTestContainer(t).ExpoProtocolHandler.HandleManifest(w, r)
 	assert.Equal(t, 200, w.Code, "Expected status code 200 when manifest is retrieved")
 	parts, err := ParseMultipartMixedResponse(w.Header().Get("Content-Type"), w.Body.Bytes())
 	if err != nil {
@@ -463,7 +459,7 @@ func TestNoUpdatesResponseForManifest(t *testing.T) {
 	r.Header.Add("expo-current-update-id", "04b793a0-b6ab-fd4f-308c-b91d812adec2")
 	r.Header.Add("expo-channel-name", "staging")
 	r.Header.Add("expo-app-id", "test-app-id")
-	handlers.ManifestHandler(w, r)
+	newTestContainer(t).ExpoProtocolHandler.HandleManifest(w, r)
 	assert.Equal(t, 200, w.Code, "Expected status code 200 when manifest is retrieved")
 	parts, err := ParseMultipartMixedResponse(w.Header().Get("Content-Type"), w.Body.Bytes())
 	if err != nil {
@@ -552,7 +548,7 @@ func TestRollbackResponseforManifest(t *testing.T) {
 	r.Header.Add("expo-embedded-update-id", "embedded-update-id")
 	r.Header.Add("expo-channel-name", "rollbackenv")
 	r.Header.Add("expo-app-id", "test-app-id")
-	handlers.ManifestHandler(w, r)
+	newTestContainer(t).ExpoProtocolHandler.HandleManifest(w, r)
 	assert.Equal(t, 200, w.Code, "Expected status code 200 when manifest is retrieved")
 	parts, err := ParseMultipartMixedResponse(w.Header().Get("Content-Type"), w.Body.Bytes())
 	if err != nil {
@@ -640,7 +636,7 @@ func TestValidRequestForProductionManifest(t *testing.T) {
 	r.Header.Add("expo-expect-signature", "true")
 	r.Header.Add("expo-channel-name", "production")
 	r.Header.Add("expo-app-id", "test-app-id")
-	handlers.ManifestHandler(w, r)
+	newTestContainer(t).ExpoProtocolHandler.HandleManifest(w, r)
 	assert.Equal(t, 200, w.Code, "Expected status code 200 when manifest is retrieved")
 	parts, err := ParseMultipartMixedResponse(w.Header().Get("Content-Type"), w.Body.Bytes())
 	if err != nil {
@@ -730,7 +726,7 @@ func TestEmptyRequestForAndroid(t *testing.T) {
 	r.Header.Add("expo-expect-signature", "true")
 	r.Header.Add("expo-channel-name", "production")
 	r.Header.Add("expo-app-id", "test-app-id")
-	handlers.ManifestHandler(w, r)
+	newTestContainer(t).ExpoProtocolHandler.HandleManifest(w, r)
 	assert.Equal(t, 200, w.Code, "Expected status code 200 when manifest is retrieved")
 	parts, err := ParseMultipartMixedResponse(w.Header().Get("Content-Type"), w.Body.Bytes())
 	if err != nil {
@@ -754,35 +750,4 @@ func TestEmptyRequestForAndroid(t *testing.T) {
 		t.Errorf("Error parsing json body: %v", err)
 	}
 	assert.Equal(t, "{\"type\":\"noUpdateAvailable\"}", body)
-}
-
-
-func TestPreWarmManifestCache(t *testing.T) {
-	teardown := setup(t)
-	defer teardown()
-	mockWorkingExpoResponse("staging")
-
-	cache := cache2.GetCache()
-
-	// Verify caches are empty before prewarm
-	lastUpdateKey := update.ComputeLastUpdateCacheKey("test-app-id", "branch-1", "1", "android")
-	assert.Equal(t, "", cache.Get(lastUpdateKey), "lastUpdate cache should be empty before prewarm")
-
-	// Run PreWarm synchronously (not as goroutine) for testing
-	update.PreWarmManifestCache("test-app-id", "branch-1", "1", "android")
-
-	// Verify lastUpdate cache was populated
-	lastUpdateCached := cache.Get(lastUpdateKey)
-	assert.NotEqual(t, "", lastUpdateCached, "lastUpdate cache should be populated after prewarm")
-
-	// Verify metadata cache was populated
-	var cachedUpdate types.Update
-	err := json.Unmarshal([]byte(lastUpdateCached), &cachedUpdate)
-	assert.NoError(t, err)
-	metadataKey := update.ComputeMetadataCacheKey("test-app-id", "branch-1", "1", cachedUpdate.UpdateId)
-	assert.NotEqual(t, "", cache.Get(metadataKey), "metadata cache should be populated after prewarm")
-
-	// Verify manifest cache was populated
-	manifestKey := update.ComputeUpdateManifestCacheKey("test-app-id", "branch-1", "1", cachedUpdate.UpdateId, "android")
-	assert.NotEqual(t, "", cache.Get(manifestKey), "manifest cache should be populated after prewarm")
 }

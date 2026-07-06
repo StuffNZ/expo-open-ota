@@ -3,7 +3,6 @@ package test
 import (
 	cache2 "expo-open-ota/internal/cache"
 	"expo-open-ota/internal/providers"
-	infrastructure "expo-open-ota/internal/router"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -91,14 +90,14 @@ func TestUpdateChannelBranchMappingInvalidatesChannelMappingCache(t *testing.T) 
 		})
 
 	// Call UpdateChannelBranchMappingHandler via the router — this should invalidate the cache
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	body := `{"releaseChannel":"staging"}`
 	req, _ := http.NewRequest("POST", "/api/apps/test-app-id/branch/branch-2-id/updateChannelBranchMapping", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+login().Token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusNoContent, w.Code)
 
 	// Verify the channel mapping cache key was deleted
 	cache := cache2.GetCache()

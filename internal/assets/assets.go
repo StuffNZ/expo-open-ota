@@ -47,6 +47,10 @@ func getAssetMetadata(req AssetsRequest, returnAsset bool) (AssetsResponse, *typ
 	}
 
 	lastUpdate := req.Update
+	if lastUpdate == nil {
+		log.Printf("[RequestID: %s] No update found for runtimeVersion: %s", requestID, req.RuntimeVersion)
+		return AssetsResponse{StatusCode: http.StatusNotFound, Body: []byte("No update found")}, nil, "", nil
+	}
 	if !returnAsset {
 		headers := map[string]string{
 			"expo-protocol-version": "1",

@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"encoding/json"
 	"expo-open-ota/config"
 	"expo-open-ota/internal/bucket"
@@ -8,7 +9,10 @@ import (
 	"expo-open-ota/internal/cdn"
 	"expo-open-ota/internal/handlers"
 	"expo-open-ota/internal/metrics"
+	infrastructure "expo-open-ota/internal/router"
 	"expo-open-ota/internal/types"
+	update2 "expo-open-ota/internal/update"
+	"github.com/gorilla/mux"
 	"github.com/jarcoal/httpmock"
 	"net/http"
 	"os"
@@ -449,4 +453,34 @@ func SetValidConfiguration() {
 	if err := config.LoadApps(); err != nil {
 		panic(err)
 	}
+}
+
+// newTestRouter builds a router with a fresh AppContainer (stateless/bucket
+// mode when DB_URL is unset). NewRouter requires the container; tests share
+// this helper instead of repeating the wiring.
+func newTestRouter(t *testing.T) *mux.Router {
+	t.Helper()
+	container, cleanup := infrastructure.InitDependencies(context.Background())
+	t.Cleanup(cleanup)
+	return infrastructure.NewRouter(container)
+}
+
+// newTestContainer exposes the wired handlers for tests that invoke a handler
+// directly (with mux.SetURLVars) instead of routing a full HTTP path.
+func newTestContainer(t *testing.T) *infrastructure.AppContainer {
+	t.Helper()
+	container, cleanup := infrastructure.InitDependencies(context.Background())
+	t.Cleanup(cleanup)
+	return container
+}
+
+// resolveLatestUpdate resolves the update the service layer would inject into
+// AssetsRequest.Update before calling the assets package directly.
+func resolveLatestUpdate(t *testing.T, appId, branch, runtimeVersion, platform string) *types.Update {
+	t.Helper()
+	u, err := update2.GetLatestUpdateBundlePathForRuntimeVersion(appId, branch, runtimeVersion, platform)
+	if err != nil {
+		t.Fatalf("resolving latest update: %v", err)
+	}
+	return u
 }

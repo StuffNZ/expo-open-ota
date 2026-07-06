@@ -1,11 +1,11 @@
 package test
 
 import (
+	"context"
 	"encoding/json"
 	"expo-open-ota/config"
-	"expo-open-ota/internal/auth"
-	"expo-open-ota/internal/bucket"
-	"expo-open-ota/internal/handlers"
+	"expo-open-ota/internal/services"
+	"expo-open-ota/internal/types"
 	infrastructure "expo-open-ota/internal/router"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
@@ -21,7 +21,7 @@ func TestLoginDashboardNotEnabled(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
 	os.Setenv("USE_DASHBOARD", "false")
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/auth/login", nil)
 	router.ServeHTTP(respRec, req)
@@ -32,7 +32,7 @@ func TestLoginDashboardNotEnabled(t *testing.T) {
 func TestLoginInvalidPassword(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	formData := url.Values{}
 	formData.Set("password", "wrongpassword")
@@ -46,7 +46,7 @@ func TestShouldRejectLoginIfAdminPasswordNotSet(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
 	os.Setenv("ADMIN_PASSWORD", "")
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	formData := url.Values{}
 	formData.Set("password", "admin")
@@ -59,7 +59,7 @@ func TestShouldRejectLoginIfAdminPasswordNotSet(t *testing.T) {
 func TestLoginValidPassword(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	formData := url.Values{}
 	formData.Set("password", "admin")
@@ -70,15 +70,17 @@ func TestLoginValidPassword(t *testing.T) {
 	// Retrieve token & refreshToken from response
 	body := respRec.Body.String()
 
-	var response auth.AuthResponse
+	var response services.AuthResponse
 	err := json.Unmarshal([]byte(body), &response)
 	assert.Nil(t, err)
 	assert.NotEmpty(t, response.Token)
 	assert.NotEmpty(t, response.RefreshToken)
 }
 
-func login() auth.AuthResponse {
-	router := infrastructure.NewRouter()
+func login() services.AuthResponse {
+	container, cleanup := infrastructure.InitDependencies(context.Background())
+	defer cleanup()
+	router := infrastructure.NewRouter(container)
 	respRec := httptest.NewRecorder()
 	formData := url.Values{}
 	formData.Set("password", "admin")
@@ -86,7 +88,7 @@ func login() auth.AuthResponse {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	router.ServeHTTP(respRec, req)
 	body := respRec.Body.String()
-	var response auth.AuthResponse
+	var response services.AuthResponse
 	_ = json.Unmarshal([]byte(body), &response)
 	return response
 }
@@ -94,7 +96,7 @@ func login() auth.AuthResponse {
 func TestRefreshToken(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	formData := url.Values{}
 	formData.Set("refreshToken", login().RefreshToken)
@@ -103,7 +105,7 @@ func TestRefreshToken(t *testing.T) {
 	router.ServeHTTP(respRec, req)
 	assert.Equal(t, http.StatusOK, respRec.Code)
 	body := respRec.Body.String()
-	var response auth.AuthResponse
+	var response services.AuthResponse
 	err := json.Unmarshal([]byte(body), &response)
 	assert.Nil(t, err)
 	assert.NotEmpty(t, response.Token)
@@ -113,7 +115,7 @@ func TestRefreshToken(t *testing.T) {
 func TestSettings(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/settings", nil)
 	req.Header.Set("Authorization", "Bearer "+login().Token)
@@ -130,7 +132,7 @@ func TestSettings(t *testing.T) {
 	responseBody = strings.ReplaceAll(responseBody, projectRoot+"/keys/public-key-test.pem", "{PROJECT_ROOT}/test/keys/public-key-test.pem")
 	responseBody = strings.ReplaceAll(responseBody, projectRoot+"/keys/private-key-test.pem", "{PROJECT_ROOT}/test/keys/private-key-test.pem")
 
-	expectedSnapshot := `{"BASE_URL":"http://localhost:3000","CACHE_MODE":"","REDIS_HOST":"","REDIS_PORT":"","STORAGE_MODE":"local","S3_BUCKET_NAME":"","LOCAL_BUCKET_BASE_PATH":"{PROJECT_ROOT}/test/test-updates","AWS_REGION":"eu-west-3","AWS_BASE_ENDPOINT":"","AWS_ACCESS_KEY_ID":"***","CLOUDFRONT_DOMAIN":"","CLOUDFRONT_KEY_PAIR_ID":"***","CLOUDFRONT_PRIVATE_KEY_B64":"***","AWSSM_CLOUDFRONT_PRIVATE_KEY_SECRET_ID":"","PRIVATE_LOCAL_CLOUDFRONT_KEY_PATH":"","PROMETHEUS_ENABLED":"","APPS":[{"id":"test-app-id"}]}`
+	expectedSnapshot := `{"BASE_URL":"http://localhost:3000","CONTROL_PLANE_ENABLED":false,"CACHE_MODE":"","REDIS_HOST":"","REDIS_PORT":"","STORAGE_MODE":"local","S3_BUCKET_NAME":"","LOCAL_BUCKET_BASE_PATH":"{PROJECT_ROOT}/test/test-updates","AWS_REGION":"eu-west-3","AWS_BASE_ENDPOINT":"","AWS_ACCESS_KEY_ID":"***","CLOUDFRONT_DOMAIN":"","CLOUDFRONT_KEY_PAIR_ID":"***","CLOUDFRONT_PRIVATE_KEY_B64":"***","AWSSM_CLOUDFRONT_PRIVATE_KEY_SECRET_ID":"","PRIVATE_LOCAL_CLOUDFRONT_KEY_PATH":"","PROMETHEUS_ENABLED":"","APPS":[{"id":"test-app-id"}]}`
 
 	assert.Equal(t, expectedSnapshot, responseBody)
 }
@@ -138,7 +140,7 @@ func TestSettings(t *testing.T) {
 func TestSettingsWithoutAuth(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/settings", nil)
 	router.ServeHTTP(respRec, req)
@@ -148,7 +150,7 @@ func TestSettingsWithoutAuth(t *testing.T) {
 func TestBranches(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	httpmock.RegisterResponder("POST", "https://api.expo.dev/graphql",
 		func(req *http.Request) (*http.Response, error) {
@@ -159,16 +161,16 @@ func TestBranches(t *testing.T) {
 	router.ServeHTTP(respRec, req)
 	assert.Equal(t, http.StatusOK, respRec.Code)
 
-	var response []handlers.BranchMapping
+	var response []types.BranchMapping
 	err := json.Unmarshal(respRec.Body.Bytes(), &response)
 	assert.Nil(t, err)
-	assert.Equal(t, `[{"branchName":"branch-1","branchId":"branch-1","releaseChannel":"staging"},{"branchName":"branch-2","branchId":"branch-2","releaseChannel":null},{"branchName":"branch-3","branchId":null,"releaseChannel":null},{"branchName":"branch-4","branchId":null,"releaseChannel":null}]`, strings.TrimSpace(string(respRec.Body.Bytes())))
+	assert.Equal(t, `[{"branchName":"branch-1","branchId":"branch-1","releaseChannel":"staging","createdAt":null},{"branchName":"branch-2","branchId":"branch-2","releaseChannel":null,"createdAt":null},{"branchName":"branch-3","branchId":null,"releaseChannel":null,"createdAt":null},{"branchName":"branch-4","branchId":null,"releaseChannel":null,"createdAt":null}]`, strings.TrimSpace(string(respRec.Body.Bytes())))
 }
 
 func TestBranchesWithoutAuth(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/apps/test-app-id/branches", nil)
 	router.ServeHTTP(respRec, req)
@@ -181,7 +183,7 @@ func TestBranchesWithoutAuth(t *testing.T) {
 func TestDashboardUnknownAppIdReturns404(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/apps/does-not-exist/branches", nil)
 	req.Header.Set("Authorization", "Bearer "+login().Token)
@@ -195,7 +197,7 @@ func TestDashboardUnknownAppIdReturns404(t *testing.T) {
 func TestDashboardRejectsInvalidBearerToken(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/settings", nil)
 	req.Header.Set("Authorization", "Bearer not.a.real.jwt")
@@ -210,10 +212,10 @@ func TestDashboardRejectsInvalidBearerToken(t *testing.T) {
 func TestDashboardUseExpoAuthRejectedOnAppAgnosticRoute(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/settings", nil)
-	req.Header.Set("Use-Expo-Auth", "true")
+	req.Header.Set("Use-Cli-Auth", "true")
 	req.Header.Set("Authorization", "Bearer expo_test_token")
 	router.ServeHTTP(respRec, req)
 	assert.Equal(t, http.StatusUnauthorized, respRec.Code)
@@ -242,10 +244,10 @@ func TestDashboardUseExpoAuthRejectsInvalidExpoToken(t *testing.T) {
 			return httpmock.NewStringResponse(404, "Unknown operation"), nil
 		})
 
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/apps/test-app-id/branches", nil)
-	req.Header.Set("Use-Expo-Auth", "true")
+	req.Header.Set("Use-Cli-Auth", "true")
 	req.Header.Set("Authorization", "Bearer bogus_expo_token")
 	router.ServeHTTP(respRec, req)
 	assert.Equal(t, http.StatusUnauthorized, respRec.Code)
@@ -292,11 +294,11 @@ func TestDashboardUseExpoAuthCrossAppAttackRejected(t *testing.T) {
 			return httpmock.NewStringResponse(http.StatusUnauthorized, `{"errors":[]}`), nil
 		})
 
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	// Caller holds an Expo session valid for user-1, but hits /api/apps/app-2/…
 	req, _ := http.NewRequest("GET", "/api/apps/app-2/branches", nil)
-	req.Header.Set("Use-Expo-Auth", "true")
+	req.Header.Set("Use-Cli-Auth", "true")
 	req.Header.Set("Authorization", "Bearer expo_session_of_user_1")
 	router.ServeHTTP(respRec, req)
 	assert.Equal(t, http.StatusUnauthorized, respRec.Code)
@@ -328,10 +330,10 @@ func TestDashboardUseExpoAuthHappyPath(t *testing.T) {
 			)
 		})
 
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/apps/test-app-id/branches", nil)
-	req.Header.Set("Use-Expo-Auth", "true")
+	req.Header.Set("Use-Cli-Auth", "true")
 	req.Header.Set("Authorization", "Bearer expo_test_token")
 	router.ServeHTTP(respRec, req)
 	assert.Equal(t, http.StatusOK, respRec.Code)
@@ -340,7 +342,7 @@ func TestDashboardUseExpoAuthHappyPath(t *testing.T) {
 func TestRuntimeVersionsWithoutAuth(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/apps/test-app-id/branch/branch-1/runtimeVersions", nil)
 	router.ServeHTTP(respRec, req)
@@ -350,7 +352,7 @@ func TestRuntimeVersionsWithoutAuth(t *testing.T) {
 func TestRuntimeVersions(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	httpmock.RegisterResponder("POST", "https://api.expo.dev/graphql",
 		func(req *http.Request) (*http.Response, error) {
@@ -360,7 +362,7 @@ func TestRuntimeVersions(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+login().Token)
 	router.ServeHTTP(respRec, req)
 	assert.Equal(t, http.StatusOK, respRec.Code)
-	var response []bucket.RuntimeVersionWithStats
+	var response []types.RuntimeVersionWithStats
 	err := json.Unmarshal(respRec.Body.Bytes(), &response)
 	assert.Nil(t, err)
 	assert.Equal(t, "[{\"runtimeVersion\":\"1\",\"lastUpdatedAt\":\"1970-01-20T09:02:50Z\",\"createdAt\":\"1970-01-20T09:02:50Z\",\"numberOfUpdates\":1}]", strings.TrimSpace(string(respRec.Body.Bytes())))
@@ -369,7 +371,7 @@ func TestRuntimeVersions(t *testing.T) {
 func TestUpdatesWithoutAuth(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/apps/test-app-id/branch/branch-1/runtimeVersion/1/updates", nil)
 	router.ServeHTTP(respRec, req)
@@ -379,7 +381,7 @@ func TestUpdatesWithoutAuth(t *testing.T) {
 func TestUpdatesRegularBranch1(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	httpmock.RegisterResponder("POST", "https://api.expo.dev/graphql",
 		func(req *http.Request) (*http.Response, error) {
@@ -395,7 +397,7 @@ func TestUpdatesRegularBranch1(t *testing.T) {
 func TestUpdatesMultiBranch2(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	httpmock.RegisterResponder("POST", "https://api.expo.dev/graphql",
 		func(req *http.Request) (*http.Response, error) {
@@ -411,7 +413,7 @@ func TestUpdatesMultiBranch2(t *testing.T) {
 func TestUpdatesSomeNotValidBranch4(t *testing.T) {
 	teardown := setup(t)
 	defer teardown()
-	router := infrastructure.NewRouter()
+	router := newTestRouter(t)
 	respRec := httptest.NewRecorder()
 	httpmock.RegisterResponder("POST", "https://api.expo.dev/graphql",
 		func(req *http.Request) (*http.Response, error) {

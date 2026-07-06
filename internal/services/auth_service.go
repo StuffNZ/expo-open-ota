@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"expo-open-ota/config"
 	"expo-open-ota/internal/crypto"
@@ -9,6 +10,7 @@ import (
 	"expo-open-ota/internal/providers"
 	"expo-open-ota/internal/types"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -48,10 +50,10 @@ func getAdminPassword() string {
 func isPasswordValid(password string) bool {
 	adminPassword := getAdminPassword()
 	if adminPassword == "" {
-		fmt.Println("admin password is not set, all requests will be rejected")
+		log.Println("admin password is not set, all requests will be rejected")
 		return false
 	}
-	return password == getAdminPassword()
+	return subtle.ConstantTimeCompare([]byte(password), []byte(adminPassword)) == 1
 }
 
 func (a *AuthService) generateAuthToken() (*string, error) {

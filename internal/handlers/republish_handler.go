@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"expo-open-ota/internal/helpers"
 	"expo-open-ota/internal/services"
-	types2 "expo-open-ota/internal/types"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -60,15 +60,26 @@ func (h *RepublishHandler) HandleRepublish(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "No updateId provided", http.StatusBadRequest)
 		return
 	}
-	previousUpdate := &types2.Update{
-		AppId:          appId,
-		Branch:         branchName,
+	// Route through RepublishRelease, NOT RepublishUpdate directly: the
+	// release path owns the validations (source update exists, is a normal
+	// valid update, platform matches). Calling the low-level create bypasses
+	// all of them.
+	newUpdate, err := h.deploymentService.RepublishRelease(r.Context(), services.RepublishParams{
+		AppID:          appId,
+		BranchName:     branchName,
+		Platform:       platform,
 		RuntimeVersion: runtimeVersion,
-		UpdateId:       updateId,
-	}
-	newUpdate, err := h.deploymentService.RepublishUpdate(r.Context(), previousUpdate, platform, commitHash)
+		CommitHash:     commitHash,
+		UpdateID:       updateId,
+		RequestID:      requestID,
+	})
 	if err != nil {
-		http.Error(w, "Error republishing update", http.StatusInternalServerError)
+		log.Printf("[RequestID: %s] Error republishing update: %v", requestID, err)
+		status := http.StatusBadRequest
+		if strings.Contains(err.Error(), "not found") {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
