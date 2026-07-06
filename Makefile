@@ -56,3 +56,7 @@ define GENERATE_HTML
 endef
 
 .PHONY: docker html
+
+test_integration:
+	docker compose up -d postgres
+	TEST_DB_URL="postgres://postgres:secret@localhost:5432/expo_ota_dev?sslmode=disable" go test -tags=integration -count=1 -v ./test/integration/...
