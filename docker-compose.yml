@@ -27,7 +27,8 @@ services:
       - .:/app
       - ~/.aws:/root/.aws:ro
     env_file:
-      - .env
+      - path: .env
+        required: false
     command: reflex -r '\.go' -s -- sh -c "ls -l cmd/api && go run cmd/api/main.go"
 
   postgres:

@@ -59,4 +59,5 @@ endef
 
 test_integration:
 	docker compose up -d postgres
-	TEST_DB_URL="postgres://postgres:secret@localhost:5432/expo_ota_dev?sslmode=disable" go test -tags=integration -count=1 -v ./test/integration/...
+	docker compose exec -T postgres sh -c 'psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='"'"'expo_ota_test'"'"'" | grep -q 1 || psql -U postgres -c "CREATE DATABASE expo_ota_test"'
+	TEST_DB_URL="postgres://postgres:secret@localhost:5432/expo_ota_test?sslmode=disable" go test -tags=integration -count=1 -v ./test/integration/...

@@ -54,6 +54,11 @@ func newStack(t *testing.T) *stack {
 	if dbURL == "" {
 		t.Skip("TEST_DB_URL not set — run 'make test_integration' (starts the compose postgres)")
 	}
+	// This suite DROPS the public schema. Refuse anything that doesn't look
+	// like a dedicated test database, so it can never eat a dev/play DB.
+	if !strings.Contains(dbURL, "test") {
+		t.Fatalf("TEST_DB_URL must point at a dedicated test database (name containing 'test'); refusing to drop schema on %q", dbURL)
+	}
 
 	// Fresh schema per test: migrations and the infra-import run from zero.
 	ctx := context.Background()
