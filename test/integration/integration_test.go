@@ -410,3 +410,13 @@ func extractLaunchAssetURL(t *testing.T, manifest string) string {
 	end := strings.Index(rest, `"`)
 	return strings.ReplaceAll(rest[:end], `\u0026`, "&")
 }
+
+func TestCreateChannelWithUnknownBranchReturns404(t *testing.T) {
+	// Mapping a channel to a branch that doesn't exist yet (the branch is
+	// created by the first publish) must be a 404, not a 500.
+	s := newStack(t)
+	resp, raw := s.adminJSON(t, "POST", "/api/apps/"+s.appId+"/channels", `{"channelName":"production","branchName":"never-published"}`)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for unknown branch, got %d: %s", resp.StatusCode, raw)
+	}
+}

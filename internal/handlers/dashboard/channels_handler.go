@@ -50,6 +50,12 @@ func (h *ChannelHandler) CreateChannelHandler(w http.ResponseWriter, r *http.Req
 			handlers.RenderError(w, http.StatusConflict, alreadyExistsErr.Error())
 			return
 		}
+		if notFoundErr := (*store.ErrResourceNotFound)(nil); errors.As(err, &notFoundErr) {
+			// Mapping a channel to a branch that doesn't exist yet (e.g.
+			// before the first publish) is a client error, not a server one.
+			handlers.RenderError(w, http.StatusNotFound, notFoundErr.Error())
+			return
+		}
 		handlers.RenderError(w, http.StatusInternalServerError, "An internal error occurred while creating the channel.")
 		return
 	}

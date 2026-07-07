@@ -180,8 +180,12 @@ func (s *PostgresBranchStore) CreateRuntimeVersion(ctx context.Context, appId st
 
 func (s *PostgresBranchStore) GetBranchByName(ctx context.Context, appId string, branchName string) (int64, error) {
 	pgAppID := ToPgUUID(appId)
-	return s.engine.Queries.GetBranchByName(ctx, pgdb.GetBranchByNameParams{
+	branchId, err := s.engine.Queries.GetBranchByName(ctx, pgdb.GetBranchByNameParams{
 		Name:  branchName,
 		AppID: pgAppID,
 	})
+	if database.IsNoRows(err) {
+		return 0, &ErrResourceNotFound{Resource: "branch", Identifier: fmt.Sprintf("name: %s, appId: %s", branchName, appId)}
+	}
+	return branchId, err
 }
