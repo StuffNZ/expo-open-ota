@@ -6,7 +6,7 @@
 replicaCount: 1 # in-memory cache: >1 replica needs Redis — deliberate later change
 
 image:
-  repository: 545828170065.dkr.ecr.ap-southeast-2.amazonaws.com/stuff-expo-ota/server
+  repository: 545828170065.dkr.ecr.ap-southeast-2.amazonaws.com/stuff-expo-ota
 
 ports:
   - port: 3000

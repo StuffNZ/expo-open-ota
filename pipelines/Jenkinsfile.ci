@@ -17,7 +17,7 @@ pipeline {
 
   environment {
     ECR_REGISTRY = '545828170065.dkr.ecr.ap-southeast-2.amazonaws.com'
-    ECR_REPO     = 'stuff-expo-ota/server'
+    ECR_REPO     = 'stuff-expo-ota'
     AWS_REGION   = 'ap-southeast-2'
   }
 

@@ -1,0 +1,106 @@
+@Library('stuff-shared-library') _
+
+/*
+ * stuff-expo-ota INFRA CD (terraform only — approval-gated; lives in this
+ * repo on stuff-main, like uira-frontend keeps its terraform in-repo).
+ *
+ * CI (pipelines/Jenkinsfile.ci) pushes images to ECR; Spinnaker
+ * (stuff-nebula-devops-tools/spinnaker/applications/stuff-expo-ota) deploys
+ * into the same namespaces as stuff-ai-service. This pipeline owns everything
+ * underneath: ECR (shared), and per-environment RDS, S3, IRSA, and secrets.
+ *
+ * Every run covers BOTH stacks: infrastructure/shared (ECR in the
+ * shared-services account — a no-op after the first apply) and
+ * infrastructure/env for the chosen ENVIRONMENT (S3, RDS, IRSA and secrets
+ * in the nebula nonprod/prod ACCOUNTS; uira-frontend pattern, state key
+ * <env>/stuff-expo-ota.tfstate). One approval gates both applies.
+ */
+pipeline {
+  agent {
+    kubernetes {
+      yaml terraformAgent()
+    }
+  }
+
+  parameters {
+    string(name: 'GIT_BRANCH', defaultValue: 'stuff-main', description: 'Branch to run from (stuff-main = temporal master)')
+    choice(name: 'ENVIRONMENT', choices: ['nonprod', 'prod'], description: 'Environment stack to plan/apply (shared ECR is always included)')
+  }
+
+  environment {
+    REPO_NAME = 'StuffNZ/expo-open-ota'
+    BASE_DIR  = 'infrastructure'
+  }
+
+  options {
+    timeout(time: 30, unit: 'MINUTES')
+    skipDefaultCheckout(true)
+    ansiColor('xterm')
+    buildDiscarder(logRotator(numToKeepStr: '20', daysToKeepStr: '90'))
+    disableConcurrentBuilds()
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        gitSetup(containerName: 'terraform')
+      }
+    }
+
+    stage('Plan: shared (ECR)') {
+      steps {
+        container('terraform') {
+          dir("${BASE_DIR}/shared") {
+            sh 'terraform init -input=false'
+            sh 'terraform plan -input=false -out=tfplan'
+          }
+        }
+      }
+    }
+
+    stage('Plan: environment') {
+      steps {
+        container('terraform') {
+          dir("${BASE_DIR}/env") {
+            sh "terraform init -input=false -backend-config=env/backend/${params.ENVIRONMENT}.tfbackend"
+            sh "terraform plan -input=false -var-file=env/values/${params.ENVIRONMENT}.tfvars -out=tfplan"
+          }
+        }
+      }
+    }
+
+    stage('Approve') {
+      steps {
+        input(
+          message: "Review both Terraform plans above (shared ECR + ${params.ENVIRONMENT}) and approve to apply",
+          submitter: 'build-administrators',
+          submitterParameter: 'APPROVED_BY'
+        )
+      }
+    }
+
+    stage('Apply: shared (ECR)') {
+      steps {
+        container('terraform') {
+          dir("${BASE_DIR}/shared") {
+            sh 'terraform apply -input=false tfplan'
+          }
+        }
+      }
+    }
+
+    stage('Apply: environment') {
+      steps {
+        container('terraform') {
+          dir("${BASE_DIR}/env") {
+            sh 'terraform apply -input=false tfplan'
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    always { cleanWs(deleteDirs: true) }
+  }
+}
