@@ -1,0 +1,34 @@
+# Production overlay — namespace stuff-web-and-apps (prod cluster).
+# Public exposure goes behind Fastly + NGWAF per the SVS-4611 plan; the
+# ingress here is the origin Fastly points at.
+
+env:
+  STORAGE_MODE: "s3"
+  AWS_REGION: "ap-southeast-2"
+  CACHE_MODE: "local"
+  USE_DASHBOARD: "true"
+  PROMETHEUS_ENABLED: "true"
+  S3_BUCKET_NAME: "stuff-expo-ota-prod-updates"
+  AWSSM_CONTROL_PLANE_MASTER_KEY_B64_SECRET_ID: "stuff-expo-ota/prod/master-key-b64"
+  BASE_URL: "https://REPLACE-WITH-PROD-PUBLIC-HOST" # TODO: Fastly-fronted hostname (asset URLs are minted from this)
+
+externalSecrets:
+  create: true
+  properties:
+    DB_URL: "stuff-expo-ota/prod/app"
+    ADMIN_PASSWORD: "stuff-expo-ota/prod/app"
+    JWT_SECRET: "stuff-expo-ota/prod/app"
+
+serviceAccount:
+  create: true
+  name: stuff-expo-ota
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::545828170065:role/stuff-expo-ota-prod-server"
+
+ingress:
+  enabled: true
+  hosts:
+    - host: REPLACE-WITH-PROD-ORIGIN-HOST # TODO: origin host behind Fastly (ota.shared.nebula... per plan)
+      paths:
+        - path: /
+          pathType: Prefix

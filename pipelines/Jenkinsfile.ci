@@ -1,0 +1,85 @@
+@Library('stuff-shared-library') _
+
+/*
+ * stuff-expo-ota CI (Stuff fork; branch stuff-main is the temporal master
+ * until PR #65 + our fixes merge upstream).
+ *
+ * PRs/branches: build + vet + unit tests + docker build (validation only).
+ * stuff-main:   additionally pushes the image to ECR, where the Spinnaker
+ *               deploy pipelines (stuff-nebula-devops-tools) pick it up.
+ */
+pipeline {
+  agent {
+    kubernetes {
+      yaml goAgent()
+    }
+  }
+
+  environment {
+    ECR_REGISTRY = '545828170065.dkr.ecr.ap-southeast-2.amazonaws.com'
+    ECR_REPO     = 'stuff-expo-ota/server'
+    AWS_REGION   = 'ap-southeast-2'
+  }
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+  }
+
+  stages {
+    stage('Build') {
+      steps {
+        container('go') {
+          sh 'go build ./...'
+        }
+      }
+    }
+
+    stage('Vet') {
+      steps {
+        container('go') {
+          sh 'go vet ./...'
+        }
+      }
+    }
+
+    stage('Test') {
+      steps {
+        container('go') {
+          sh 'go test ./... -coverprofile=coverage.out'
+        }
+      }
+    }
+
+    stage('Docker Build') {
+      steps {
+        script {
+          env.IMAGE_TAG = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+        }
+        container('docker') {
+          sh 'docker build -t ${ECR_REGISTRY}/${ECR_REPO}:${IMAGE_TAG} .'
+        }
+      }
+    }
+
+    stage('Push Image') {
+      when { branch 'stuff-main' }
+      steps {
+        container('aws') {
+          sh 'aws ecr get-login-password --region ${AWS_REGION} > ecr-pass'
+        }
+        container('docker') {
+          sh '''
+            cat ecr-pass | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+            rm -f ecr-pass
+            docker push ${ECR_REGISTRY}/${ECR_REPO}:${IMAGE_TAG}
+          '''
+        }
+      }
+    }
+  }
+
+  post {
+    success { echo "CI green${env.BRANCH_NAME == 'stuff-main' ? " — pushed ${env.ECR_REPO}:${env.IMAGE_TAG}" : ''}" }
+  }
+}

@@ -1,0 +1,32 @@
+# Staging overlay — namespace stuff-web-and-apps-staging (non-prod cluster).
+
+env:
+  STORAGE_MODE: "s3"
+  AWS_REGION: "ap-southeast-2"
+  CACHE_MODE: "local"
+  USE_DASHBOARD: "true"
+  PROMETHEUS_ENABLED: "true"
+  S3_BUCKET_NAME: "stuff-expo-ota-nonprod-updates"
+  AWSSM_CONTROL_PLANE_MASTER_KEY_B64_SECRET_ID: "stuff-expo-ota/nonprod/master-key-b64"
+  BASE_URL: "https://REPLACE-WITH-STAGING-HOST" # TODO: staging ingress host (KiwiOps convention)
+
+externalSecrets:
+  create: true
+  properties:
+    DB_URL: "stuff-expo-ota/nonprod/app"
+    ADMIN_PASSWORD: "stuff-expo-ota/nonprod/app"
+    JWT_SECRET: "stuff-expo-ota/nonprod/app"
+
+serviceAccount:
+  create: true
+  name: stuff-expo-ota
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::545828170065:role/stuff-expo-ota-nonprod-server"
+
+ingress:
+  enabled: true
+  hosts:
+    - host: REPLACE-WITH-STAGING-HOST # TODO: same host as BASE_URL above
+      paths:
+        - path: /
+          pathType: Prefix

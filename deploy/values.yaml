@@ -1,0 +1,83 @@
+# Base values for Stuff deployments of the OTA server via the deployment-basic
+# chart (stuff-nexus-helm) — Spinnaker overlays values-staging.yaml or
+# values-production.yaml on top. This file lives on stuff-main (temporal
+# master) so the service is wired exactly like any other Stuff service.
+
+replicaCount: 1 # in-memory cache: >1 replica needs Redis — deliberate later change
+
+image:
+  repository: 545828170065.dkr.ecr.ap-southeast-2.amazonaws.com/stuff-expo-ota/server
+
+ports:
+  - port: 3000
+    name: http
+    containerPort: 3000
+    protocol: TCP
+
+# Plain (non-secret) config. Environment-specific values live in the overlay
+# files; secrets come via externalSecrets below.
+env:
+  STORAGE_MODE: "s3"
+  AWS_REGION: "ap-southeast-2"
+  CACHE_MODE: "local"
+  USE_DASHBOARD: "true"
+  PROMETHEUS_ENABLED: "true"
+
+# DB_URL / ADMIN_PASSWORD / JWT_SECRET are properties of one JSON secret per
+# environment (stuff-expo-ota/<env>/app, created by the infra pipeline); the
+# overlay files bind them. The SecretStore authenticates with this pod's
+# service account (IRSA role from the infra pipeline).
+awssecretsmanager:
+  enabled: true
+  region: ap-southeast-2
+
+externalSecrets:
+  create: true
+
+parameterStore:
+  enabled: false
+
+serviceAccount:
+  create: true
+  name: stuff-expo-ota
+  # role-arn annotation is environment-specific — see overlays
+
+probes:
+  enabled: true
+  startupProbe:
+    httpGet:
+      path: /hc
+      port: 3000
+  livenessProbe:
+    httpGet:
+      path: /hc
+      port: 3000
+  readinessProbe:
+    httpGet:
+      path: /hc
+      port: 3000
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "3000"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  fsGroup: 101
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 100
+  runAsGroup: 101
+  allowPrivilegeEscalation: false
+
+service:
+  type: ClusterIP
+  port: 3000
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
