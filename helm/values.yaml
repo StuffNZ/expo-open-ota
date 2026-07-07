@@ -54,6 +54,26 @@ multiApp: "false"
 #       privateSecretId: "/eoota/prod/private"
 apps: []
 
+# OpenTelemetry export (traces, metrics and logs over OTLP). Disabled by
+# default — the Prometheus /metrics endpoint keeps working regardless, and
+# when enabled the existing Prometheus metrics are also exported over OTLP.
+# Point the endpoint at any OTLP-compatible backend, e.g.:
+#   SigNoz (self-hosted): http://signoz-otel-collector.signoz:4318
+#   New Relic:            https://otlp.nr-data.net
+# Backends that need an API key (New Relic, SigNoz Cloud, ...) take it via
+# the standard OTEL_EXPORTER_OTLP_HEADERS variable — add it to the
+# `environment` list yourself (backed by your secret) rather than putting
+# the key in values, e.g.:
+#   - name: "OTEL_EXPORTER_OTLP_HEADERS"
+#     value: ""
+#     required:
+#       - key: "otelEnabled"
+#         is: "true"
+otelEnabled: "false"
+otelServiceName: "expo-open-ota"
+otelExporterOtlpEndpoint: ""
+otelExporterOtlpProtocol: "http/protobuf" # or "grpc"
+
 environment:
   - name: "USE_DASHBOARD"
     key: "useDashboard"
@@ -252,6 +272,28 @@ environment:
   - name: "JWT_SECRET"
     value: ""
     required: true
+  - name: "OTEL_ENABLED"
+    key: "otelEnabled"
+    required: true
+    computed: true
+  - name: "OTEL_SERVICE_NAME"
+    key: "otelServiceName"
+    computed: true
+    required:
+      - key: "otelEnabled"
+        is: "true"
+  - name: "OTEL_EXPORTER_OTLP_ENDPOINT"
+    key: "otelExporterOtlpEndpoint"
+    computed: true
+    required:
+      - key: "otelEnabled"
+        is: "true"
+  - name: "OTEL_EXPORTER_OTLP_PROTOCOL"
+    key: "otelExporterOtlpProtocol"
+    computed: true
+    required:
+      - key: "otelEnabled"
+        is: "true"
 
 
 podAnnotations: {}

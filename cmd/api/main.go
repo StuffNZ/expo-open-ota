@@ -5,6 +5,7 @@ import (
 	"expo-open-ota/config"
 	"expo-open-ota/internal/metrics"
 	"expo-open-ota/internal/migration"
+	"expo-open-ota/internal/observability"
 	infrastructure "expo-open-ota/internal/router"
 	"log"
 	"net/http"
@@ -20,6 +21,16 @@ func init() {
 }
 
 func main() {
+	otelShutdown, err := observability.Setup(context.Background())
+	if err != nil {
+		log.Fatalf("Failed to configure OpenTelemetry: %v", err)
+	}
+	defer func() {
+		if err := otelShutdown(context.Background()); err != nil {
+			log.Printf("OpenTelemetry shutdown error: %v", err)
+		}
+	}()
+
 	migration.RunMigrationsWithLock()
 
 	container, cleanup := infrastructure.InitDependencies(context.Background())
@@ -32,7 +43,7 @@ func main() {
 		handlers.AllowedOrigins([]string{"*"}),
 		handlers.AllowCredentials(),
 	)
-	err := http.ListenAndServe("0.0.0.0:"+config.GetPort(), corsOptions(router))
+	err = http.ListenAndServe("0.0.0.0:"+config.GetPort(), corsOptions(router))
 	if err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}

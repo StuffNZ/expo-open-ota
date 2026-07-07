@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"log"
+	"expo-open-ota/internal/observability"
 	"net/http"
 	"runtime/debug"
 	"strings"
@@ -30,13 +30,13 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 
 		safeHeaders := redactHeaders(r.Header)
 
-		log.Printf("Started %s %s with query: %s and headers: %v", r.Method, r.RequestURI, r.URL.RawQuery, safeHeaders)
+		observability.Infof(r.Context(), "Started %s %s with query: %s and headers: %v", r.Method, r.RequestURI, r.URL.RawQuery, safeHeaders)
 
 		recorder := &statusRecorder{ResponseWriter: w, statusCode: http.StatusOK}
 
 		defer func() {
 			if err := recover(); err != nil {
-				log.Printf("Panic recovered during %s %s\nQuery: %s\nHeaders: %v\nError: %v\nStack Trace:\n%s",
+				observability.Errorf(r.Context(), "Panic recovered during %s %s\nQuery: %s\nHeaders: %v\nError: %v\nStack Trace:\n%s",
 					r.Method, r.RequestURI, r.URL.RawQuery, safeHeaders, err, debug.Stack())
 				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			}
@@ -45,9 +45,9 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(recorder, r)
 
 		if recorder.statusCode >= 500 {
-			log.Printf("Error detected: %s %s returned status %d", r.Method, r.RequestURI, recorder.statusCode)
+			observability.Errorf(r.Context(), "Error detected: %s %s returned status %d", r.Method, r.RequestURI, recorder.statusCode)
 		}
-		log.Printf("Completed %s %d in %v", r.RequestURI, recorder.statusCode, time.Since(start))
+		observability.Infof(r.Context(), "Completed %s %d in %v", r.RequestURI, recorder.statusCode, time.Since(start))
 	})
 }
 

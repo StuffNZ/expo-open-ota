@@ -5,6 +5,7 @@ import (
 	dashutils "expo-open-ota/internal/dashboard"
 	"expo-open-ota/internal/metrics"
 	"expo-open-ota/internal/middleware"
+	"expo-open-ota/internal/observability"
 	"fmt"
 	"log"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
 )
 
 func HealthCheck(w http.ResponseWriter, r *http.Request) {
@@ -35,6 +37,13 @@ func getDashboardPath() string {
 
 func NewRouter(container *AppContainer) *mux.Router {
 	r := mux.NewRouter()
+	if observability.Enabled() {
+		// Registered before LoggingMiddleware so request logs carry the span
+		// context. Health checks and metric scrapes are not worth tracing.
+		r.Use(otelmux.Middleware(observability.ServiceName(), otelmux.WithFilter(func(req *http.Request) bool {
+			return req.URL.Path != "/hc" && req.URL.Path != "/health" && req.URL.Path != "/metrics"
+		})))
+	}
 	r.Use(middleware.LoggingMiddleware)
 
 	r.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {

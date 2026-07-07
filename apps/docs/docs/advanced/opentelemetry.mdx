@@ -1,0 +1,78 @@
+---
+sidebar_position: 4
+---
+
+# OpenTelemetry
+
+The server can export **traces, metrics and logs** over [OTLP](https://opentelemetry.io/docs/specs/otlp/) to any OpenTelemetry-compatible backend: [SigNoz](https://signoz.io), [New Relic](https://newrelic.com), Grafana, or an [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/).
+
+OpenTelemetry export is **disabled by default** and fully backward compatible:
+
+- The [Prometheus `/metrics` endpoint](/docs/advanced/prometheus) keeps working exactly as before, whether OTLP export is enabled or not.
+- When enabled, the existing Prometheus metrics (`active_users_total`, `update_downloads_total`, ...) are bridged onto OTLP unchanged, alongside Go runtime metrics.
+- Every HTTP request is traced (health checks and metric scrapes excluded), and all server logs are exported as OTLP log records — request logs carry the active `trace_id`/`span_id` for correlation.
+
+## Configuration
+
+Enable with `OTEL_ENABLED=true` and point the exporter at your backend. All standard [OTel SDK environment variables](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/) are honoured:
+
+| Name | Required | Description | Example |
+| --- | --- | --- | --- |
+| `OTEL_ENABLED` | ✅ | Enable OpenTelemetry export | `true` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | ✅ | OTLP endpoint of your backend or collector | `http://signoz-otel-collector:4318` |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | ❌ | `http/protobuf` (default) or `grpc` | `grpc` |
+| `OTEL_SERVICE_NAME` | ❌ | Service name in your backend (default `expo-open-ota`) | `expo-open-ota-prod` |
+| `OTEL_EXPORTER_OTLP_HEADERS` | ❌ | Extra headers, e.g. backend API keys | `api-key=YOUR_KEY` |
+| `OTEL_TRACES_SAMPLER` / `OTEL_TRACES_SAMPLER_ARG` | ❌ | Sampling strategy (default: always sample) | `parentbased_traceidratio` / `0.1` |
+| `OTEL_RESOURCE_ATTRIBUTES` | ❌ | Extra resource attributes | `deployment.environment=production` |
+
+### SigNoz
+
+```bash
+OTEL_ENABLED=true
+# Self-hosted / in-cluster collector:
+OTEL_EXPORTER_OTLP_ENDPOINT=http://signoz-otel-collector.signoz:4318
+# SigNoz Cloud:
+# OTEL_EXPORTER_OTLP_ENDPOINT=https://ingest.<region>.signoz.cloud:443
+# OTEL_EXPORTER_OTLP_HEADERS=signoz-ingestion-key=YOUR_KEY
+```
+
+### New Relic
+
+```bash
+OTEL_ENABLED=true
+OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.nr-data.net
+OTEL_EXPORTER_OTLP_HEADERS=api-key=YOUR_LICENSE_KEY
+```
+
+## Helm
+
+If you use the [Helm chart](/docs/deployment/helm), set:
+
+```yaml
+otelEnabled: "true"
+otelServiceName: "expo-open-ota"
+otelExporterOtlpEndpoint: "http://signoz-otel-collector.signoz:4318"
+otelExporterOtlpProtocol: "http/protobuf" # or "grpc"
+```
+
+For backends that need an API key, add `OTEL_EXPORTER_OTLP_HEADERS` to the chart's `environment` list (backed by your existing secret) instead of putting the key in values:
+
+```yaml
+environment:
+  # ... existing entries ...
+  - name: "OTEL_EXPORTER_OTLP_HEADERS"
+    value: ""
+    required:
+      - key: "otelEnabled"
+        is: "true"
+```
+
+## Sampling
+
+Traces are sampled at 100% by default, which is appropriate for low-to-medium traffic. For high-traffic deployments, sample a fraction of traces (errors in sampled traces are always kept by parent-based sampling):
+
+```bash
+OTEL_TRACES_SAMPLER=parentbased_traceidratio
+OTEL_TRACES_SAMPLER_ARG=0.1
+```

@@ -33,6 +33,7 @@
 | **Secure key management** | AWS Secrets Manager, environment variables, or local key files |
 | **Dashboard** | Built-in web UI for monitoring updates, branches, and runtime versions |
 | **Prometheus metrics** | Production observability out of the box |
+| **OpenTelemetry** | Optional OTLP export of traces, metrics and logs to SigNoz, New Relic, or any OTel collector |
 | **No database required** | Zero external dependencies beyond your storage provider |
 | **Helm chart** | Ready for Kubernetes deployments |
 

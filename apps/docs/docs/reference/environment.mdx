@@ -119,6 +119,15 @@ below.
 | --- | --- | --- | --- | --- |
 | `PROMETHEUS_ENABLED` | ❌ (Automatic) | Automatically set to `true` if `prometheus.io/scrape: "true"` is present in `podAnnotations`, otherwise must be explicitly set to `true` | `true` | |
 
+#### **OpenTelemetry Configuration**
+| Name | Required | Description | Example | Reference |
+| --- | --- | --- | --- | --- |
+| `OTEL_ENABLED` | ❌ | Export traces, metrics and logs over OTLP (SigNoz, New Relic, any OTel collector) | `true` | [Ref](/docs/advanced/opentelemetry) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | ✅ if OTEL_ENABLED is `true` | OTLP endpoint of your backend | `http://signoz-otel-collector:4318` | [Ref](/docs/advanced/opentelemetry) |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | ❌ | `http/protobuf` (default) or `grpc` | `grpc` | [Ref](/docs/advanced/opentelemetry) |
+| `OTEL_SERVICE_NAME` | ❌ | Service name reported to the backend (default `expo-open-ota`) | `expo-open-ota-prod` | [Ref](/docs/advanced/opentelemetry) |
+| `OTEL_EXPORTER_OTLP_HEADERS` | ❌ | Extra headers such as backend API keys | `api-key=YOUR_KEY` | [Ref](/docs/advanced/opentelemetry) |
+
 #### **Dashboard Configuration**
 | Name | Required | Description | Example | Reference |
 | --- | --- | --- | --- | --- |
