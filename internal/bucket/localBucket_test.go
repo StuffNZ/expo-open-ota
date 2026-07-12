@@ -162,3 +162,18 @@ func TestGetFile_NormalSubdirectoryAllowed(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Nil(t, file) // file doesn't exist, but no path traversal error
 }
+
+func TestApplyMigration_CreatesMissingRootPath(t *testing.T) {
+	// Regression: a fresh LOCAL_BUCKET_BASE_PATH pointing at a directory that
+	// does not exist yet must be created by the bucket migration, not fail
+	// with "open .../.migrationhistory: no such file or directory".
+	basePath := filepath.Join(t.TempDir(), "does-not-exist-yet")
+
+	b := &LocalBucket{BasePath: basePath}
+	err := b.ApplyMigration("test-migration")
+	assert.Nil(t, err)
+
+	migrations, err := b.RetrieveMigrationHistory()
+	assert.Nil(t, err)
+	assert.Contains(t, migrations, "test-migration")
+}

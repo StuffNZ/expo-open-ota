@@ -409,6 +409,10 @@ func (b *LocalBucket) ApplyMigration(migrationId string) error {
 		return errors.New("BasePath not set")
 	}
 
+	if err := os.MkdirAll(b.rootPath(), os.ModePerm); err != nil {
+		return fmt.Errorf("create bucket root %s error: %w", b.rootPath(), err)
+	}
+
 	migrationHistoryPath := filepath.Join(b.rootPath(), ".migrationhistory")
 
 	migrations, err := b.RetrieveMigrationHistory()

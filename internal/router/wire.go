@@ -26,6 +26,7 @@ type AppContainer struct {
 	RollbackHandler     *handlers.RollbackHandler
 	SettingsHandler     *dashhandlers.SettingsHandler
 	UpdateHandler       *dashhandlers.UpdateHandler
+	UpdateService       *services.UpdateService
 	UploadHandler       *handlers.UploadHandler
 	RepublishHandler    *handlers.RepublishHandler
 }
@@ -98,6 +99,7 @@ func InitDependencies(ctx context.Context) (*AppContainer, func()) {
 		RollbackHandler:     handlers.NewRollbackHandler(authService, deploymentService),
 		SettingsHandler:     dashhandlers.NewSettingsHandler(appService),
 		UpdateHandler:       dashhandlers.NewUpdateHandler(updateService),
+		UpdateService:       updateService,
 		UploadHandler:       handlers.NewUploadHandler(authService, deploymentService),
 	}, cleanup
 }

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"expo-open-ota/config"
 	"expo-open-ota/internal/bucket"
+	cache2 "expo-open-ota/internal/cache"
+	"expo-open-ota/internal/services"
 	"expo-open-ota/internal/types"
 	"expo-open-ota/internal/update"
 	"github.com/jarcoal/httpmock"
@@ -750,4 +752,39 @@ func TestEmptyRequestForAndroid(t *testing.T) {
 		t.Errorf("Error parsing json body: %v", err)
 	}
 	assert.Equal(t, "{\"type\":\"noUpdateAvailable\"}", body)
+}
+
+func TestPreWarmManifestCache(t *testing.T) {
+	teardown := setup(t)
+	defer teardown()
+
+	c := newTestContainer(t)
+	cache := cache2.GetCache()
+
+	appId := "test-app-id"
+	branch := "branch-1"
+	runtimeVersion := "1"
+	platform := "android"
+
+	// Verify caches are empty before prewarm
+	lastUpdateKey := update.ComputeLastUpdateCacheKey(appId, branch, runtimeVersion, platform)
+	assert.Equal(t, "", cache.Get(lastUpdateKey), "lastUpdate cache should be empty before prewarm")
+
+	// Run PreWarm synchronously (not as a goroutine) for testing
+	services.PreWarmManifestCache(c.UpdateService, appId, branch, runtimeVersion, platform)
+
+	// Verify lastUpdate cache was populated
+	lastUpdateCached := cache.Get(lastUpdateKey)
+	assert.NotEqual(t, "", lastUpdateCached, "lastUpdate cache should be populated after prewarm")
+
+	// Verify metadata cache was populated
+	var cachedUpdate types.Update
+	err := json.Unmarshal([]byte(lastUpdateCached), &cachedUpdate)
+	assert.NoError(t, err)
+	metadataKey := update.ComputeMetadataCacheKey(appId, branch, runtimeVersion, cachedUpdate.UpdateId)
+	assert.NotEqual(t, "", cache.Get(metadataKey), "metadata cache should be populated after prewarm")
+
+	// Verify manifest cache was populated
+	manifestKey := update.ComputeUpdateManifestCacheKey(appId, branch, runtimeVersion, cachedUpdate.UpdateId, platform)
+	assert.NotEqual(t, "", cache.Get(manifestKey), "manifest cache should be populated after prewarm")
 }

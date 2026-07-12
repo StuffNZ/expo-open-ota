@@ -2,11 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"expo-open-ota/internal/helpers"
 	"expo-open-ota/internal/services"
 	"log"
 	"net/http"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -60,10 +60,6 @@ func (h *RepublishHandler) HandleRepublish(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "No updateId provided", http.StatusBadRequest)
 		return
 	}
-	// Route through RepublishRelease, NOT RepublishUpdate directly: the
-	// release path owns the validations (source update exists, is a normal
-	// valid update, platform matches). Calling the low-level create bypasses
-	// all of them.
 	newUpdate, err := h.deploymentService.RepublishRelease(r.Context(), services.RepublishParams{
 		AppID:          appId,
 		BranchName:     branchName,
@@ -75,15 +71,13 @@ func (h *RepublishHandler) HandleRepublish(w http.ResponseWriter, r *http.Reques
 	})
 	if err != nil {
 		log.Printf("[RequestID: %s] Error republishing update: %v", requestID, err)
-		// Validation failures surface their message; anything else (storage,
-		// database) is an internal error whose details must not reach the
-		// client.
-		msg := err.Error()
 		switch {
-		case strings.Contains(msg, "not found"):
-			http.Error(w, msg, http.StatusNotFound)
-		case strings.HasPrefix(msg, "republish aborted") || strings.HasPrefix(msg, "platform identifier mismatch"):
-			http.Error(w, msg, http.StatusBadRequest)
+		case errors.Is(err, services.ErrSourceUpdateNotFound):
+			http.Error(w, err.Error(), http.StatusNotFound)
+		case errors.Is(err, services.ErrSourceNotNormalUpdate),
+			errors.Is(err, services.ErrSourceUpdateInvalid),
+			errors.Is(err, services.ErrPlatformMismatch):
+			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
 			http.Error(w, "Error republishing update", http.StatusInternalServerError)
 		}

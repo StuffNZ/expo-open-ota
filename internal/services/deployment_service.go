@@ -22,6 +22,11 @@ var (
 	ErrInvalidToken      = errors.New("the provided upload token is invalid or expired")
 	ErrTokenAppMismatch  = errors.New("upload token does not match the requested application context")
 	ErrUploadFailed      = errors.New("failed to write upload file stream to destination storage")
+
+	ErrSourceUpdateNotFound  = errors.New("source update record not found")
+	ErrSourceNotNormalUpdate = errors.New("republish aborted: Update type is not normal update")
+	ErrSourceUpdateInvalid   = errors.New("republish aborted: Update is not valid")
+	ErrPlatformMismatch      = errors.New("platform identifier mismatch")
 )
 
 type ProcessUpdateParams struct {
@@ -335,7 +340,7 @@ func (s *DeploymentService) RepublishRelease(ctx context.Context, params Republi
 	}
 	if targetUpdate == nil {
 		log.Printf("[RequestID: %s] Validation failed: Source update %s not found for branch %s", params.RequestID, params.UpdateID, params.BranchName)
-		return nil, fmt.Errorf("source update record not found")
+		return nil, ErrSourceUpdateNotFound
 	}
 
 	updateType, err := s.updateRepo.GetUpdateType(ctx, *targetUpdate)
@@ -345,12 +350,12 @@ func (s *DeploymentService) RepublishRelease(ctx context.Context, params Republi
 	}
 	if updateType != types.NormalUpdate {
 		log.Printf("[RequestID: %s] Update type is not normal update", params.RequestID)
-		return nil, fmt.Errorf("republish aborted: Update type is not normal update")
+		return nil, ErrSourceNotNormalUpdate
 	}
 
 	if !update2.IsUpdateValid(*targetUpdate) {
 		log.Printf("[RequestID: %s] Update is not valid", params.RequestID)
-		return nil, fmt.Errorf("republish aborted: Update is not valid")
+		return nil, ErrSourceUpdateInvalid
 	}
 
 	storedMetadata, err := s.updateRepo.RetrieveUpdateStoredMetadata(ctx, *targetUpdate)
@@ -365,7 +370,7 @@ func (s *DeploymentService) RepublishRelease(ctx context.Context, params Republi
 
 	if storedMetadata.Platform != params.Platform {
 		log.Printf("[RequestID: %s] Update platform mismatch: %s != %s", params.RequestID, storedMetadata.Platform, params.Platform)
-		return nil, fmt.Errorf("platform identifier mismatch: package compiled for %s cannot target %s", storedMetadata.Platform, params.Platform)
+		return nil, fmt.Errorf("%w: package compiled for %s cannot target %s", ErrPlatformMismatch, storedMetadata.Platform, params.Platform)
 	}
 
 	newUpdate, err := s.RepublishUpdate(ctx, targetUpdate, params.Platform, params.CommitHash)
